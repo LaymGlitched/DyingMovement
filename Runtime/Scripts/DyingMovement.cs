@@ -12,6 +12,7 @@ public class DyingMovement : MonoBehaviour
         WallRunning,
         Climbing,
         Mantling,
+        Dash,
     }
 
     [Header("Input")]
@@ -19,6 +20,7 @@ public class DyingMovement : MonoBehaviour
     public InputActionReference jump;
     public InputActionReference sprint;
     public InputActionReference crouch;
+    public InputActionReference dash;
 
     [Header("References")]
     public Transform cameraTransform;
@@ -104,6 +106,14 @@ public class DyingMovement : MonoBehaviour
     [Header("Ground Snap")]
     public float groundSnapDistance = 0.35f;
     public float groundStickForce = 2f;
+
+    [Header("Dash")]
+    public bool enableDash = true;
+    public float dashSpeed = 18f;
+    public float dashDuration = 0.18f;
+    public float dashCooldown = 0.45f;
+    public float dashRollSpeed = 14f;
+    public float dashGravityScale = 0.35f;
 
     [Header("Systems")]
     public bool enableVault = true;
@@ -195,6 +205,11 @@ public class DyingMovement : MonoBehaviour
     Vector3 _climbMantleTarget;
     float _climbBufferTimer;
 
+    Vector3 _dashVelocity;
+    float _dashTimer;
+    float _dashCooldownTimer;
+    bool _dashRolling;
+
     void Awake()
     {
         _cc = GetComponent<CharacterController>();
@@ -207,6 +222,7 @@ public class DyingMovement : MonoBehaviour
         jump.action.Enable();
         sprint.action.Enable();
         crouch.action.Enable();
+        dash.action.Enable();
         jump.action.performed += OnJumpPerformed;
     }
 
@@ -216,6 +232,7 @@ public class DyingMovement : MonoBehaviour
         jump.action.Disable();
         sprint.action.Disable();
         crouch.action.Disable();
+        dash.action.Disable();
         jump.action.performed -= OnJumpPerformed;
     }
 
@@ -227,24 +244,32 @@ public class DyingMovement : MonoBehaviour
         TickCrouch();
         TickVertical(); // Gravity & Jumping logic
 
-        // State Machine Router
         switch (currentState)
         {
             case MovementState.Mantling:
                 TickMantle();
                 break;
+
             case MovementState.Climbing:
                 TickClimb();
                 break;
+
             case MovementState.Vaulting:
                 TickVault();
                 break;
+
             case MovementState.WallRunning:
                 TickWallRun();
                 break;
+
             case MovementState.Sliding:
                 TickSliding();
                 break;
+
+            case MovementState.Dash:
+                TickDash();
+                break;
+
             case MovementState.Normal:
                 TryInitiateSpecialMovements();
                 TickHorizontal();
@@ -269,6 +294,8 @@ public class DyingMovement : MonoBehaviour
         if (CheckClimb())
             return;
         if (CheckWallRun())
+            return;
+        if (CheckDash())
             return;
         CheckSlide();
     }
@@ -773,6 +800,7 @@ public class DyingMovement : MonoBehaviour
 
         _jumpBufferTimer -= Time.deltaTime;
         _wallRunCooldown -= Time.deltaTime;
+        _dashCooldownTimer -= Time.deltaTime;
 
         // Jump logic (Only execute if not in a special movement state that overrides it)
         bool canJump = _coyoteTimer > 0f && !_jumpConsumed && _jumpBufferTimer > 0f;
@@ -943,5 +971,66 @@ public class DyingMovement : MonoBehaviour
         }
 
         stamina = _currentStamina;
+    }
+
+    bool CheckDash()
+    {
+        if (!enableDash)
+            return false;
+
+        if (_dashCooldownTimer > 0f)
+            return false;
+
+        if (!dash.action.WasPressedThisFrame())
+            return false;
+
+        Vector2 input = move.action.ReadValue<Vector2>();
+
+        Vector3 fwd = Vector3.ProjectOnPlane(cameraTransform.forward, Vector3.up).normalized;
+        Vector3 right = Vector3.ProjectOnPlane(cameraTransform.right, Vector3.up).normalized;
+
+        Vector3 dir = (fwd * input.y + right * input.x).normalized;
+
+        if (dir.sqrMagnitude < 0.01f)
+            dir = transform.forward;
+
+        _dashRolling = _isCrouching || _airTime > 0.25f;
+
+        float speed = _dashRolling ? dashRollSpeed : dashSpeed;
+
+        _dashVelocity = dir * speed;
+        _dashTimer = dashDuration;
+        _dashCooldownTimer = dashCooldown;
+
+        SetState(MovementState.Dash);
+        return true;
+    }
+
+    void TickDash()
+    {
+        _dashTimer -= Time.deltaTime;
+
+        _hVelocity = _dashVelocity;
+
+        if (!_cc.isGrounded)
+            _vVelocity += gravity * dashGravityScale * Time.deltaTime;
+        else
+            _vVelocity = -groundStickForce;
+
+        if (_dashRolling)
+            _isCrouching = true;
+
+        if (_dashTimer <= 0f)
+        {
+            if (_dashRolling && _cc.isGrounded)
+            {
+                SetState(MovementState.Sliding);
+                _slideVelocity = _dashVelocity;
+            }
+            else
+            {
+                SetState(MovementState.Normal);
+            }
+        }
     }
 }
