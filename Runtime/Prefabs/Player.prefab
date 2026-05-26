@@ -393,6 +393,7 @@ MonoBehaviour:
   jump: {fileID: -2099379676528639254, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   sprint: {fileID: -7471211009204490832, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   crouch: {fileID: 7040659881675835329, guid: 052faaac586de48259a63d0c4782560b, type: 3}
+  dash: {fileID: 781758505272157105, guid: 052faaac586de48259a63d0c4782560b, type: 3}
   cameraTransform: {fileID: 8795467112039956569}
   currentState: 0
   walkSpeed: 3.5
@@ -454,6 +455,12 @@ MonoBehaviour:
   climbBufferTime: 0.18
   groundSnapDistance: 0.1
   groundStickForce: 2
+  enableDash: 1
+  dashSpeed: 18
+  dashDuration: 0.18
+  dashCooldown: 0.45
+  dashRollSpeed: 14
+  dashGravityScale: 0.35
   enableVault: 1
   enableSlide: 1
   enableWallRun: 1
