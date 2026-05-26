@@ -456,11 +456,11 @@ MonoBehaviour:
   groundSnapDistance: 0.1
   groundStickForce: 2
   enableDash: 1
-  dashSpeed: 18
-  dashDuration: 0.18
-  dashCooldown: 0.45
+  dashSpeed: 11
+  dashDuration: 0.2
+  dashCooldown: 0.5
   dashRollSpeed: 14
-  dashGravityScale: 0.35
+  dashGravityScale: 0.1
   enableVault: 1
   enableSlide: 1
   enableWallRun: 1
