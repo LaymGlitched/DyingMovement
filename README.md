@@ -23,7 +23,8 @@ https://github.com/LaymGlitched/DyingMovement.git
 
 ## License & Terms of Use
 
-This project is source-available under a modified MIT license. 
+> [!IMPORTANT]
+> This project is source-available under a modified MIT license.
 
 ### What you CAN do:
 
