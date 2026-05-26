@@ -8,7 +8,7 @@ Choose the installation method that fits your workflow:
 
 ### Method 1: Direct Download
 
-1. Download the latest release from the \[Releases](../../releases) page.
+1. Download the latest release from the [Releases](../../releases) page.
 2. Drag the downloaded `.unitypackage` into your project window (In /Assets/)
 
 ### Method 2: Git UPM (Recommended)
