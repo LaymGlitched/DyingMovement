@@ -1,0 +1,30 @@
+{
+  "name": "com.laym.dyingmovement",
+  "version": "1.0.0",
+  "displayName": "Dying Movement",
+  "description": "A fast-paced open-source movement system for Unity featuring sliding, vaulting, parkour mechanics and extensible movement states.",
+  "unity": "6000.6",
+  "author": {
+    "name": "Laym",
+    "url": "https://github.com/LaymGlitched"
+  },
+  "license": "Custom",
+  "keywords": [
+    "movement",
+    "controller",
+    "parkour",
+    "fps",
+    "character",
+    "open-source"
+  ],
+  "dependencies": {
+    "com.unity.inputsystem": "1.19.0"
+  },
+  "samples": [
+    {
+      "displayName": "Basic Demo",
+      "description": "Example scene showing DyingMovement setup and mechanics.",
+      "path": "Samples~/BasicDemo"
+    }
+  ]
+}
