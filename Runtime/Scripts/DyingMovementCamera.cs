@@ -43,20 +43,17 @@ public class DyingMovementCamera : MonoBehaviour
     [Tooltip("The maximum speed the camera can catch up vertically when stepping up stairs.")]
     public float maxStairSnapSpeed = 6f;
 
-    // ── Private ───────────────────────────────────────────────────────────
     float _pitch;
     float _yaw;
     Vector2 _gpSmoothed;
     Vector2 _gpVelocity;
     Vector3 _camRestLocalPos;
 
-    // Landing spring
     float _springPos;
     float _springVel;
     const float SpringK = 220f;
     const float SpringDamp = 22f;
 
-    // Offsets & Tilts
     float _currentTilt;
     float _slideTilt;
     float _stairSmoothVelocity;
@@ -66,7 +63,6 @@ public class DyingMovementCamera : MonoBehaviour
     float _wallBounceSpringPos;
     float _wallBounceSpringVel;
 
-    // World tracking for stair smoothing
     float _smoothTargetWorldY;
 
     void Awake()
@@ -87,12 +83,10 @@ public class DyingMovementCamera : MonoBehaviour
     {
         if (movement != null)
         {
-            // Initialise the world tracking height to match the player's start height
             _smoothTargetWorldY = movement.transform.position.y + _camRestLocalPos.y;
         }
     }
 
-    // Runs after CharacterController has finished moving the player for the frame
     void LateUpdate()
     {
         if (movement == null)
@@ -152,7 +146,6 @@ public class DyingMovementCamera : MonoBehaviour
 
     void TickPositionAndBob()
     {
-        // ── 1. Calculate ideal local procedural offsets (Bob, Crouch, Springs) ──
         if (movement.landingImpact > 0f)
             _springVel -= movement.landingImpact * 3.5f;
 
@@ -175,29 +168,21 @@ public class DyingMovementCamera : MonoBehaviour
             crouchCameraSpeed * Time.deltaTime
         );
 
-        // Combine everything except the base vertical position into a local offset vector
         Vector3 localProceduralOffset =
             movement.headBobOffset
             + Vector3.up * _springPos
             + Vector3.up * _crouchOffset
             + climbOffset;
 
-        // ── 2. Handle Global Stair/Step Height Smoothing ──
-        // Determine what the absolute world height of the camera base should be right now
         float rigidTargetWorldY = movement.transform.position.y + _camRestLocalPos.y;
-
         CharacterController cc = movement.GetComponent<CharacterController>();
-
         bool stairSmooth = cc.isGrounded && !movement.IsClimbing;
 
-        // When stepping UP: cap catch-up speed so the camera glides smoothly over the step.
-        // When stepping DOWN (ledge, slope): snap instantly so the camera doesn't float above ground.
         float smoothTime = stairSmooth ? 0.05f : 0.015f;
-        float maxSpeed;
-        if (stairSmooth)
-            maxSpeed = rigidTargetWorldY > _smoothTargetWorldY ? maxStairSnapSpeed : Mathf.Infinity;
-        else
-            maxSpeed = Mathf.Infinity;
+        float maxSpeed =
+            stairSmooth && rigidTargetWorldY > _smoothTargetWorldY
+                ? maxStairSnapSpeed
+                : Mathf.Infinity;
 
         _smoothTargetWorldY = Mathf.SmoothDamp(
             _smoothTargetWorldY,
@@ -207,15 +192,11 @@ public class DyingMovementCamera : MonoBehaviour
             maxSpeed
         );
 
-        // ── 3. Apply Final Absolute World Position ──
-        // Construct the base position using the parent horizontal position, but our smoothed tracking height
         Vector3 finalWorldPos = new Vector3(
             movement.transform.position.x,
             _smoothTargetWorldY,
             movement.transform.position.z
         );
-
-        // Convert the local procedural offsets (head bob, crouch) into world vectors and add them
         finalWorldPos += movement.transform.TransformDirection(localProceduralOffset);
 
         transform.position = finalWorldPos;
@@ -230,10 +211,7 @@ public class DyingMovementCamera : MonoBehaviour
         float slopeTarget = onSteepSlope ? Vector3.Dot(normal, transform.right) * 12f : 0f;
         _currentTilt = Mathf.Lerp(_currentTilt, slopeTarget, 6f * Time.deltaTime);
 
-        float slideStrength = Mathf.Clamp01(
-            movement.GetComponent<CharacterController>().velocity.magnitude / movement.slideSpeed
-        );
-
+        float slideStrength = Mathf.Clamp01(cc.velocity.magnitude / movement.slideSpeed);
         float slideTarget = movement.IsSliding ? -10f * slideStrength : 0f;
         _slideTilt = Mathf.Lerp(_slideTilt, slideTarget, 8f * Time.deltaTime);
 

@@ -422,6 +422,7 @@ MonoBehaviour:
   zingusWindow: 0.2
   fallSlideBoost: 4
   slideGravityMultiplier: 2.2
+  slideGroundedGraceTime: 0.15
   vaultHeight: 1.4
   vaultForwardCheck: 0.45
   vaultUpSpeed: 7
@@ -501,7 +502,7 @@ CharacterController:
   serializedVersion: 3
   m_Height: 1
   m_Radius: 0.25
-  m_SlopeLimit: 35
+  m_SlopeLimit: 40
   m_StepOffset: 0.4
   m_SkinWidth: 0.08
   m_MinMoveDistance: 0.001

@@ -68,6 +68,11 @@ public class DyingMovement : MonoBehaviour
     public float fallSlideBoost = 4f;
     public float slideGravityMultiplier = 2.2f;
 
+    [Tooltip(
+        "Time window allowed to lose strict controller grounding before dropping out of a slide."
+    )]
+    public float slideGroundedGraceTime = 0.15f;
+
     [Header("Vault")]
     public float vaultHeight = 1.4f;
     public float vaultForwardCheck = 0.45f;
@@ -204,6 +209,7 @@ public class DyingMovement : MonoBehaviour
     Vector3 _slideVelocity;
     float _airTime;
     float _landingTimer;
+    float _slideGroundedTimer; // Keeps track of airborne slide frames
 
     Vector3 _vaultVelocity;
     float _vaultTimer;
@@ -295,7 +301,36 @@ public class DyingMovement : MonoBehaviour
         TickHeadBob();
 
         // Apply final movement
-        _cc.Move((_hVelocity + Vector3.up * _vVelocity + _slopeVelocity) * Time.deltaTime);
+        Vector3 moveVel = _hVelocity + Vector3.up * _vVelocity + _slopeVelocity;
+
+        bool isSpecialState =
+            currentState == MovementState.Climbing
+            || currentState == MovementState.Mantling
+            || currentState == MovementState.WallRunning
+            || currentState == MovementState.Vaulting
+            || currentState == MovementState.Dash;
+
+        // FIX 4: Track steep angle sliding continuously through the physics loop
+        float finalSlopeAngle = Vector3.Angle(groundNormal, Vector3.up);
+        bool isOnSteepSlope = finalSlopeAngle > _cc.slopeLimit && finalSlopeAngle < 85f;
+
+        if ((_cc.isGrounded || isOnSteepSlope) && !isSpecialState && _vVelocity <= 0f)
+        {
+            if (finalSlopeAngle > _cc.slopeLimit)
+            {
+                // Project onto the slope plane, then cancel any residual outward component.
+                moveVel = Vector3.ProjectOnPlane(moveVel, groundNormal);
+                float outward = Vector3.Dot(moveVel, groundNormal);
+                if (outward > 0f)
+                    moveVel -= groundNormal * outward;
+
+                // Stop upward bouncing artifacts while sliding down
+                if (moveVel.y > 0f)
+                    moveVel.y = 0f;
+            }
+        }
+
+        _cc.Move(moveVel * Time.deltaTime);
     }
 
     void SetState(MovementState newState)
@@ -321,7 +356,6 @@ public class DyingMovement : MonoBehaviour
     {
         bool want = crouch.action.IsPressed();
 
-        // Block uncrouching if ceiling is too low
         if (!want && _isCrouching)
         {
             if (
@@ -381,6 +415,9 @@ public class DyingMovement : MonoBehaviour
         }
 
         if (!hitWall)
+            return false;
+
+        if (Vector3.Angle(wallHit.normal, Vector3.up) < 70f)
             return false;
 
         float approachAngle = Vector3.Angle(-_hVelocity.normalized, wallHit.normal);
@@ -460,6 +497,9 @@ public class DyingMovement : MonoBehaviour
 
         float approach = Vector3.Angle(-_hVelocity.normalized, wallHit.normal);
         if (approach > 85f)
+            return false;
+
+        if (Vector3.Angle(wallHit.normal, Vector3.up) < 70f)
             return false;
 
         Vector3 topOrigin = wallHit.point + Vector3.up * climbMaxHeight;
@@ -584,7 +624,6 @@ public class DyingMovement : MonoBehaviour
     {
         Vector3 toTarget = _climbMantleTarget - transform.position;
 
-        // Smooth continuous movement instead of snapping positions
         Vector3 desiredMove = Vector3.ClampMagnitude(toTarget * 12f, climbSpeed * 2f);
         _hVelocity = Vector3.ProjectOnPlane(desiredMove, Vector3.up);
         _vVelocity = desiredMove.y;
@@ -592,7 +631,7 @@ public class DyingMovement : MonoBehaviour
         if (toTarget.magnitude < 0.15f)
         {
             _hVelocity = Vector3.zero;
-            _vVelocity = -2f; // Push down slightly to ensure ground contact
+            _vVelocity = -2f;
             StopClimb();
         }
     }
@@ -600,8 +639,6 @@ public class DyingMovement : MonoBehaviour
     void StopClimb()
     {
         climbProgress = 0f;
-        // Prevent immediately re-triggering a climb the frame after finishing/cancelling one.
-        // We reuse _wallRunCooldown since CheckClimb already gates on it.
         _wallRunCooldown = climbCooldown;
         SetState(MovementState.Normal);
     }
@@ -649,7 +686,7 @@ public class DyingMovement : MonoBehaviour
         float parallelism = Mathf.Abs(Vector3.Dot(_hVelocity.normalized, wallFwd.normalized));
 
         if (parallelism < 0.5f)
-            return false; // Too steep an angle to latch on
+            return false;
 
         SetState(MovementState.WallRunning);
         _wallRunSide = side;
@@ -723,8 +760,7 @@ public class DyingMovement : MonoBehaviour
     {
         _jumpBufferTimer = 0f;
         Vector3 wallFwd = Vector3.ProjectOnPlane(_hVelocity, _wallRunNormal);
-        _hVelocity =
-            _wallRunNormal * wallJumpAwayForce + (0.65f * wallRunSpeed * wallFwd.normalized);
+        _hVelocity = _wallRunNormal * wallJumpAwayForce + wallFwd.normalized * wallRunSpeed * 0.65f;
         _vVelocity = wallJumpUpForce;
         StopWallRun(true);
     }
@@ -786,30 +822,79 @@ public class DyingMovement : MonoBehaviour
         }
         _wasGrounded = grounded;
 
+        // ── Ground/Slope Raycast (Decoupled from _cc.isGrounded) ──────────
+        groundNormal = Vector3.up;
+        Vector3 slideTarget = Vector3.zero;
+        float currentSlopeAngle = 0f;
+
+        // FIX 1: Fire the raycast continuously on steep angles even when Unity breaks grounding
+        if (
+            Physics.Raycast(
+                transform.position,
+                Vector3.down,
+                out RaycastHit hit,
+                _cc.height * 0.5f + 0.5f
+            )
+        )
+        {
+            currentSlopeAngle = Vector3.Angle(hit.normal, Vector3.up);
+
+            if (grounded || currentSlopeAngle > _cc.slopeLimit)
+            {
+                groundNormal = hit.normal;
+
+                if (currentSlopeAngle > _cc.slopeLimit && currentSlopeAngle < 85f)
+                {
+                    Vector3 slideDir = Vector3.ProjectOnPlane(Vector3.down, hit.normal).normalized;
+                    float steepness = Mathf.InverseLerp(_cc.slopeLimit, 70f, currentSlopeAngle);
+                    slideTarget = slideDir * slopeSlideSpeed * (1f + steepness);
+                }
+            }
+        }
+
         // ── Grounded reset ────────────────────────────────────────────────
         if (grounded)
         {
             if (_vVelocity < 0f)
-                _vVelocity = -groundStickForce;
+            {
+                // FIX 2: Do NOT apply aggressive stick force into an illegal slope.
+                // Doing so forces an immediate physics rejection response from Unity, causing jitter.
+                if (currentSlopeAngle > _cc.slopeLimit)
+                {
+                    _vVelocity = -0.5f; // Gentle tracking force
+                }
+                else
+                {
+                    float slopeStickScale = Mathf.Lerp(
+                        1f,
+                        5f,
+                        Mathf.InverseLerp(_cc.slopeLimit, 70f, currentSlopeAngle)
+                    );
+                    _vVelocity = -groundStickForce * slopeStickScale;
+                }
+            }
 
             _coyoteTimer = coyoteTime;
             _jumpConsumed = false;
 
-            // Extra stair snap
-            if (
-                Physics.Raycast(
-                    transform.position + Vector3.up * 0.1f,
-                    Vector3.down,
-                    out RaycastHit snapHit,
-                    (_cc.height * 0.5f) + groundSnapDistance
-                )
-            )
+            // FIX 3: Prevent the stair snapper from executing on steep surfaces
+            if (currentSlopeAngle <= _cc.slopeLimit)
             {
-                float dist = snapHit.distance - (_cc.height * 0.5f);
-
-                if (dist > 0.02f && dist < groundSnapDistance)
+                if (
+                    Physics.Raycast(
+                        transform.position + Vector3.up * 0.1f,
+                        Vector3.down,
+                        out RaycastHit snapHit,
+                        (_cc.height * 0.5f) + groundSnapDistance
+                    )
+                )
                 {
-                    _cc.Move(Vector3.down * dist);
+                    float dist = snapHit.distance - (_cc.height * 0.5f);
+
+                    if (dist > 0.02f && dist < groundSnapDistance)
+                    {
+                        _cc.Move(Vector3.down * dist);
+                    }
                 }
             }
         }
@@ -844,30 +929,6 @@ public class DyingMovement : MonoBehaviour
             && currentState != MovementState.WallRunning
         )
             _vVelocity += grav * Time.deltaTime;
-
-        groundNormal = Vector3.up;
-        Vector3 slideTarget = Vector3.zero;
-
-        if (
-            grounded
-            && Physics.Raycast(
-                transform.position,
-                Vector3.down,
-                out RaycastHit hit,
-                _cc.height * 0.5f + 0.4f
-            )
-        )
-        {
-            groundNormal = hit.normal;
-            float angle = Vector3.Angle(hit.normal, Vector3.up);
-
-            if (angle > _cc.slopeLimit)
-            {
-                Vector3 slide = Vector3.ProjectOnPlane(Vector3.down, hit.normal).normalized;
-                float steepness = Mathf.InverseLerp(_cc.slopeLimit, 70f, angle);
-                slideTarget = (1f + steepness) * slopeSlideSpeed * slide;
-            }
-        }
 
         _slopeVelSmoothed = Vector3.MoveTowards(
             _slopeVelSmoothed,
@@ -914,6 +975,7 @@ public class DyingMovement : MonoBehaviour
         );
         _hVelocity = _slideVelocity;
 
+        // FIX: Clean statement evaluation completely independent of external Raycast variables
         if (!_isCrouching || _slideVelocity.magnitude < slideMinSpeed || !_cc.isGrounded)
             SetState(MovementState.Normal);
     }
@@ -935,14 +997,20 @@ public class DyingMovement : MonoBehaviour
         Vector3 right = Vector3.ProjectOnPlane(cameraTransform.right, Vector3.up).normalized;
 
         Vector3 wish = (fwd * input.y + right * input.x).normalized;
-        if (grounded)
+
+        // FIX 5: Project horizontal intention alongside the slope's flat normal plane
+        float currentSlope = Vector3.Angle(groundNormal, Vector3.up);
+        bool isOnSteepSlope = currentSlope > _cc.slopeLimit && currentSlope < 85f;
+
+        if (grounded || isOnSteepSlope)
             wish = Vector3.ProjectOnPlane(wish, groundNormal).normalized;
 
         bool hasInput = input.magnitude > 0.05f;
 
         if (hasInput)
         {
-            if (grounded)
+            // FIX 6: Force ground math execution when on a steep slope to prevent air control oscillation
+            if (grounded || isOnSteepSlope)
             {
                 // Split current velocity into the component the player wants and the component they don't.
                 float alongWish = Vector3.Dot(_hVelocity, wish);
@@ -959,6 +1027,12 @@ public class DyingMovement : MonoBehaviour
                 );
 
                 _hVelocity = wish * newAlong + perp;
+
+                // Block the player from trying to force their way manually straight up the slope face
+                if (isOnSteepSlope && _hVelocity.y > 0f)
+                {
+                    _hVelocity.y = 0f;
+                }
             }
             else
             {
@@ -972,8 +1046,6 @@ public class DyingMovement : MonoBehaviour
         }
         else
         {
-            // No input: coast to a stop using groundFriction (softer than deceleration so
-            // the player carries momentum when they intentionally stop at speed).
             float frictionRate = grounded ? groundFriction : acceleration * airControl;
             _hVelocity = Vector3.MoveTowards(
                 _hVelocity,
