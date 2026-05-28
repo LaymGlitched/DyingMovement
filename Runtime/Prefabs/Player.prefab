@@ -401,6 +401,7 @@ MonoBehaviour:
   crouchSpeed: 2.2
   acceleration: 14
   deceleration: 45
+  groundFriction: 45
   airControl: 0.5
   jumpHeight: 1.8
   gravity: -22
