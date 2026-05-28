@@ -144,7 +144,7 @@ public class DyingMovementCamera : MonoBehaviour
         float targetFOV =
             baseFOV
             + movement.sprintLerp * sprintFOVAdd
-            + (movement.isWallRunning ? wallRunFOVAdd : 0f)
+            + (movement.IsWallRunning ? wallRunFOVAdd : 0f)
             + _wallBouncePulse * wallBounceFOVKick;
 
         cam.fieldOfView = Mathf.Lerp(cam.fieldOfView, targetFOV, fovLerpSpeed * Time.deltaTime);
@@ -165,8 +165,8 @@ public class DyingMovementCamera : MonoBehaviour
         float targetSlideTilt = movement.IsSliding ? -10f : 0f;
         _slideTilt = Mathf.Lerp(_slideTilt, targetSlideTilt, 8f * Time.deltaTime);
 
-        float climbLean = movement.isClimbing ? movement.climbProgress * 0.06f : 0f;
-        Vector3 climbOffset = movement.isClimbing ? transform.forward * climbLean : Vector3.zero;
+        float climbLean = movement.IsClimbing ? movement.climbProgress * 0.06f : 0f;
+        Vector3 climbOffset = movement.IsClimbing ? transform.forward * climbLean : Vector3.zero;
 
         float targetCrouchOffset = movement._isCrouching ? -crouchCameraOffset : 0f;
         _crouchOffset = Mathf.Lerp(
@@ -188,7 +188,7 @@ public class DyingMovementCamera : MonoBehaviour
 
         CharacterController cc = movement.GetComponent<CharacterController>();
 
-        bool stairSmooth = cc.isGrounded && !movement.isClimbing;
+        bool stairSmooth = cc.isGrounded && !movement.IsClimbing;
 
         // When stepping UP: cap catch-up speed so the camera glides smoothly over the step.
         // When stepping DOWN (ledge, slope): snap instantly so the camera doesn't float above ground.
@@ -237,7 +237,7 @@ public class DyingMovementCamera : MonoBehaviour
         float slideTarget = movement.IsSliding ? -10f * slideStrength : 0f;
         _slideTilt = Mathf.Lerp(_slideTilt, slideTarget, 8f * Time.deltaTime);
 
-        float wallTarget = movement.isWallRunning ? movement.wallSide * wallRunTiltAngle : 0f;
+        float wallTarget = movement.IsWallRunning ? movement.wallSide * wallRunTiltAngle : 0f;
         _wallRunTilt = Mathf.Lerp(_wallRunTilt, wallTarget, wallRunTiltSpeed * Time.deltaTime);
 
         if (movement.wallBounced)

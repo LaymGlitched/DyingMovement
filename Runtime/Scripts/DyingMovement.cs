@@ -34,6 +34,11 @@ public class DyingMovement : MonoBehaviour
     public float crouchSpeed = 2.2f;
     public float acceleration = 14f;
     public float deceleration = 18f;
+
+    [Tooltip(
+        "How quickly the player bleeds speed when there is no input. Lower = more momentum when stopping. Does not affect turning response."
+    )]
+    public float groundFriction = 8f;
     public float airControl = 0.25f;
 
     [Header("Jump")]
@@ -153,7 +158,7 @@ public class DyingMovement : MonoBehaviour
     public Vector3 groundNormal = Vector3.up;
 
     [HideInInspector]
-    public bool isWallRunning => currentState == MovementState.WallRunning;
+    public bool IsWallRunning => currentState == MovementState.WallRunning;
 
     [HideInInspector]
     public int wallSide;
@@ -165,7 +170,7 @@ public class DyingMovement : MonoBehaviour
     public bool wallBounced;
 
     [HideInInspector]
-    public bool isClimbing =>
+    public bool IsClimbing =>
         currentState == MovementState.Climbing || currentState == MovementState.Mantling;
 
     [HideInInspector]
@@ -718,7 +723,8 @@ public class DyingMovement : MonoBehaviour
     {
         _jumpBufferTimer = 0f;
         Vector3 wallFwd = Vector3.ProjectOnPlane(_hVelocity, _wallRunNormal);
-        _hVelocity = _wallRunNormal * wallJumpAwayForce + wallFwd.normalized * wallRunSpeed * 0.65f;
+        _hVelocity =
+            _wallRunNormal * wallJumpAwayForce + (0.65f * wallRunSpeed * wallFwd.normalized);
         _vVelocity = wallJumpUpForce;
         StopWallRun(true);
     }
@@ -859,7 +865,7 @@ public class DyingMovement : MonoBehaviour
             {
                 Vector3 slide = Vector3.ProjectOnPlane(Vector3.down, hit.normal).normalized;
                 float steepness = Mathf.InverseLerp(_cc.slopeLimit, 70f, angle);
-                slideTarget = slide * slopeSlideSpeed * (1f + steepness);
+                slideTarget = (1f + steepness) * slopeSlideSpeed * slide;
             }
         }
 
@@ -924,6 +930,7 @@ public class DyingMovement : MonoBehaviour
         float targetSpeed = _isCrouching
             ? crouchSpeed
             : Mathf.Lerp(walkSpeed, sprintSpeed, sprintLerp);
+
         Vector3 fwd = Vector3.ProjectOnPlane(cameraTransform.forward, Vector3.up).normalized;
         Vector3 right = Vector3.ProjectOnPlane(cameraTransform.right, Vector3.up).normalized;
 
@@ -931,12 +938,49 @@ public class DyingMovement : MonoBehaviour
         if (grounded)
             wish = Vector3.ProjectOnPlane(wish, groundNormal).normalized;
 
-        Vector3 target = wish * (input.magnitude > 0.05f ? targetSpeed : 0f);
+        bool hasInput = input.magnitude > 0.05f;
 
-        float accelRate = grounded
-            ? (input.magnitude > 0.05f ? acceleration : deceleration)
-            : acceleration * airControl;
-        _hVelocity = Vector3.MoveTowards(_hVelocity, target, accelRate * Time.deltaTime);
+        if (hasInput)
+        {
+            if (grounded)
+            {
+                // Split current velocity into the component the player wants and the component they don't.
+                float alongWish = Vector3.Dot(_hVelocity, wish);
+                Vector3 perp = _hVelocity - wish * alongWish;
+
+                // Rapidly kill the perpendicular drift so turning feels sharp, not slippery.
+                perp = Vector3.MoveTowards(perp, Vector3.zero, deceleration * Time.deltaTime);
+
+                // Independently accelerate in the desired direction.
+                float newAlong = Mathf.MoveTowards(
+                    alongWish,
+                    targetSpeed,
+                    acceleration * Time.deltaTime
+                );
+
+                _hVelocity = wish * newAlong + perp;
+            }
+            else
+            {
+                // Air: simple nudge toward desired velocity (air control unchanged).
+                _hVelocity = Vector3.MoveTowards(
+                    _hVelocity,
+                    wish * targetSpeed,
+                    acceleration * airControl * Time.deltaTime
+                );
+            }
+        }
+        else
+        {
+            // No input: coast to a stop using groundFriction (softer than deceleration so
+            // the player carries momentum when they intentionally stop at speed).
+            float frictionRate = grounded ? groundFriction : acceleration * airControl;
+            _hVelocity = Vector3.MoveTowards(
+                _hVelocity,
+                Vector3.zero,
+                frictionRate * Time.deltaTime
+            );
+        }
     }
 
     // ── Head Bob & Stamina ────────────────────────────────────────────────
