@@ -93,8 +93,8 @@ public class DyingMovement : MonoBehaviour
     [Header("Wall Bounce")]
     public float bounceTriggerSpeed = 5f;
     public float bounceBoost = 1.3f;
-    public float bounceMinAngle = 15f; // Widened for better reliability
-    public float bounceMaxAngle = 85f;
+    public float bounceMinAngle = 15f;
+    public float bounceMaxAngle = 65f;
 
     [Header("Wall Climb")]
     public bool enableClimb = true;
@@ -102,6 +102,17 @@ public class DyingMovement : MonoBehaviour
     public float climbSpeed = 4.5f;
     public float climbAttraction = 3f;
     public float climbBufferTime = 0.18f;
+
+    [Tooltip(
+        "How far in front of the player (beyond CC radius) to detect a climbable wall. Keep smaller than vaultForwardCheck."
+    )]
+    public float climbDetectDist = 0.2f;
+
+    [Tooltip("Maximum time a single climb can last before being forcibly stopped.")]
+    public float climbMaxDuration = 3f;
+
+    [Tooltip("Cooldown before the player can start a new climb after finishing or cancelling one.")]
+    public float climbCooldown = 0.5f;
 
     [Header("Ground Snap")]
     public float groundSnapDistance = 0.35f;
@@ -201,7 +212,7 @@ public class DyingMovement : MonoBehaviour
     float _climbTargetY;
     Vector3 _climbWallNormal;
     float _climbTimer;
-    const float ClimbMaxDuration = 3f;
+
     Vector3 _climbMantleTarget;
     float _climbBufferTimer;
 
@@ -428,7 +439,7 @@ public class DyingMovement : MonoBehaviour
             moveDir = transform.forward;
         moveDir.Normalize();
 
-        float checkDist = _cc.radius + vaultForwardCheck;
+        float checkDist = _cc.radius + climbDetectDist;
 
         if (
             !Physics.SphereCast(
@@ -524,7 +535,7 @@ public class DyingMovement : MonoBehaviour
         }
 
         float relHeight = topHit.point.y - transform.position.y;
-        if (relHeight > climbMaxHeight)
+        if (relHeight <= 0f || relHeight > climbMaxHeight)
         {
             StopClimb();
             return;
@@ -560,7 +571,7 @@ public class DyingMovement : MonoBehaviour
             return;
         }
 
-        if (_climbTimer > ClimbMaxDuration)
+        if (_climbTimer > climbMaxDuration)
             StopClimb();
     }
 
@@ -584,6 +595,9 @@ public class DyingMovement : MonoBehaviour
     void StopClimb()
     {
         climbProgress = 0f;
+        // Prevent immediately re-triggering a climb the frame after finishing/cancelling one.
+        // We reuse _wallRunCooldown since CheckClimb already gates on it.
+        _wallRunCooldown = climbCooldown;
         SetState(MovementState.Normal);
     }
 
@@ -880,7 +894,8 @@ public class DyingMovement : MonoBehaviour
 
             if (_landingTimer > 0f)
                 boost += zingusBoost;
-            _slideVelocity = dir * (_hVelocity.magnitude + boost);
+            // Cap so spam-re-sliding can never stack speed beyond slideSpeed
+            _slideVelocity = dir * Mathf.Min(_hVelocity.magnitude + boost, slideSpeed);
         }
     }
 

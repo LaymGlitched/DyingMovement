@@ -188,10 +188,16 @@ public class DyingMovementCamera : MonoBehaviour
 
         CharacterController cc = movement.GetComponent<CharacterController>();
 
-        bool stairSmooth = cc.isGrounded && !movement.isClimbing && !movement.IsSliding;
+        bool stairSmooth = cc.isGrounded && !movement.isClimbing;
 
+        // When stepping UP: cap catch-up speed so the camera glides smoothly over the step.
+        // When stepping DOWN (ledge, slope): snap instantly so the camera doesn't float above ground.
         float smoothTime = stairSmooth ? 0.05f : 0.015f;
-        float maxSpeed = stairSmooth ? maxStairSnapSpeed : Mathf.Infinity;
+        float maxSpeed;
+        if (stairSmooth)
+            maxSpeed = rigidTargetWorldY > _smoothTargetWorldY ? maxStairSnapSpeed : Mathf.Infinity;
+        else
+            maxSpeed = Mathf.Infinity;
 
         _smoothTargetWorldY = Mathf.SmoothDamp(
             _smoothTargetWorldY,

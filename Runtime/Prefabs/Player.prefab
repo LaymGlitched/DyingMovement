@@ -341,7 +341,7 @@ MonoBehaviour:
   wallRunTiltSpeed: 7
   wallRunFOVAdd: 7
   wallBounceFOVKick: 14
-  maxStairSnapSpeed: 6
+  maxStairSnapSpeed: 8
 --- !u!1 &7171031006689048250
 GameObject:
   m_ObjectHideFlags: 0
@@ -453,6 +453,9 @@ MonoBehaviour:
   climbSpeed: 12
   climbAttraction: 4
   climbBufferTime: 0.18
+  climbDetectDist: 0.2
+  climbMaxDuration: 3
+  climbCooldown: 0.5
   groundSnapDistance: 0.1
   groundStickForce: 2
   enableDash: 1
